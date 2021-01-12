@@ -1,8 +1,25 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
+import random
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+class CustomDataset(Dataset): 
+    def __init__(self, x_data, y_data):
+        self.x_data = x_data
+        self.y_data = y_data
+
+    def __len__(self):
+        return len(self.x_data)
+
+    def __getitem__(self, idx): 
+        x = torch.FloatTensor(self.x_data[idx]).cuda()
+        y = torch.FloatTensor(self.y_data[idx]).cuda()
+        return x, y
 
 class Block(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -32,12 +49,12 @@ class Model(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.model = [Block(156, 128)]
+        self.model = [Block(156, 300)]
         for i in range(5):
-            self.model.append(Block(128, 128))
+            self.model.append(Block(300, 300))
         self.model = nn.Sequential(*self.model)
         self.fc = nn.Sequential(
-            nn.Linear(128, 1),
+            nn.Linear(300, 1),
             nn.Sigmoid(),
         )
 
@@ -47,11 +64,47 @@ class Model(nn.Module):
         return out
 
 if __name__ == '__main__':
-    batch_size = 64
+    
+    x_data = []
+    y_data = []
+
+    f_c = open('.\\dataset\\ciphertext.txt', 'r')
+    f_p = open('.\\dataset\\plaintext.txt', 'r')
+    f_k = open('.\\dataset\\key.txt', 'r')
+
+    for i in range(10000):
+        tmp_x = eval(f_p.readline()) + eval(f_c.readline()) + eval(f_k.readline())[28:]
+        tmp_y = [1]
+        x_data.append(tmp_x)
+        y_data.append(tmp_y)
+    for i in range(10000):
+        tmp_x = [random.randint(0,1) for _ in range(156)]
+        tmp_y = [0]
+        x_data.append(tmp_x)
+        y_data.append(tmp_y)
 
     model = Model()
     model.to(device)
-    sample = torch.randint(0,2, (batch_size, 156,)).to(device).type(torch.FloatTensor)
-    res = model(sample)
-    print(res.shape)
-    print(res)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.02) 
+
+    dataset = CustomDataset(x_data, y_data)
+    dataloader = DataLoader(dataset, batch_size = 64, shuffle = True)
+    nb_epochs = 10000
+    for epoch in range(nb_epochs + 1):
+        for batch_idx, samples in enumerate(dataloader):
+            # print(batch_idx)
+            x_train, y_train = samples
+            # H(x) 계산
+            prediction = model(x_train)
+            # cost 계산
+            cost = F.l1_loss(prediction, y_train)
+
+            # cost로 H(x) 계산
+            optimizer.zero_grad()
+            cost.backward()
+            optimizer.step()
+
+        print('Epoch {:4d}/{} Batch {}/{} Cost: {:.6f}'.format(
+            epoch, nb_epochs, batch_idx+1, len(dataloader),
+            cost.item()
+            ))

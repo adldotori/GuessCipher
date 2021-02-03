@@ -46,15 +46,15 @@ class Block(nn.Module):
         return self.relu2(out)
          
 class Model(nn.Module):
-    def __init__(self):
+    def __init__(self, known_key_bits):
         super().__init__()
 
-        self.model = [Block(156, 300)]
-        for i in range(5):
-            self.model.append(Block(300, 300))
+        self.model = [Block(64+known_key_bits, 512)]
+        for i in range(3):
+            self.model.append(Block(512, 512))
         self.model = nn.Sequential(*self.model)
         self.fc = nn.Sequential(
-            nn.Linear(300, 1),
+            nn.Linear(512, 64),
             nn.Sigmoid(),
         )
 
@@ -67,29 +67,44 @@ if __name__ == '__main__':
     
     x_data = []
     y_data = []
+    test_x_data = []
+    test_y_data = []
+
+    known_key_bits = 56
+    data_start = 10000
 
     f_c = open('.\\dataset\\ciphertext.txt', 'r')
     f_p = open('.\\dataset\\plaintext.txt', 'r')
     f_k = open('.\\dataset\\key.txt', 'r')
 
-    for i in range(10000):
-        tmp_x = eval(f_p.readline()) + eval(f_c.readline()) + eval(f_k.readline())[28:]
-        tmp_y = [1]
-        x_data.append(tmp_x)
-        y_data.append(tmp_y)
-    for i in range(10000):
-        tmp_x = [random.randint(0,1) for _ in range(156)]
-        tmp_y = [0]
-        x_data.append(tmp_x)
-        y_data.append(tmp_y)
+    for _ in range(data_start):
+        f_p.readline()
+        f_c.readline()
+        f_k.readline()
 
-    model = Model()
+    for i in range(100000):
+        tmp_x = eval(f_p.readline()) + eval(f_k.readline())[:known_key_bits]
+        tmp_y = eval(f_c.readline())
+        x_data.append(tmp_x)
+        y_data.append(tmp_y)
+        #y_data.append([10*i for i in tmp_y])
+
+        tmp_x = eval(f_p.readline()) + eval(f_k.readline())[:known_key_bits]
+        tmp_y = eval(f_c.readline())
+        test_x_data.append(tmp_x)
+        test_y_data.append(tmp_y)
+        #test_y_data.append([10*i for i in tmp_y])
+        
+
+    model = Model(known_key_bits)
     model.to(device)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.02) 
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.00002) 
 
     dataset = CustomDataset(x_data, y_data)
-    dataloader = DataLoader(dataset, batch_size = 64, shuffle = True)
-    nb_epochs = 10000
+    test_dataset = CustomDataset(test_x_data, test_y_data)
+    dataloader = DataLoader(dataset, batch_size = 32, shuffle = True)
+    test_dataloader = DataLoader(test_dataset, batch_size = 25)
+    nb_epochs = 5
     for epoch in range(nb_epochs + 1):
         for batch_idx, samples in enumerate(dataloader):
             # print(batch_idx)
@@ -103,8 +118,25 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             cost.backward()
             optimizer.step()
+            if cost.item() < 0.05 and epoch > 0:
+                break
+            if batch_idx % 500 == 0:
+                print('Epoch {:4d}/{} Batch {}/{} Cost: {:.6f}'.format(
+                    epoch, nb_epochs, batch_idx+1, len(dataloader),
+                    cost.item()
+                    ))
+        if cost.item() < 0.05 and epoch > 0:
+            print('Epoch {:4d}/{} Batch {}/{} Cost: {:.6f}'.format(
+                epoch, nb_epochs, batch_idx+1, len(dataloader),
+                cost.item()
+                ))
+            break
 
-        print('Epoch {:4d}/{} Batch {}/{} Cost: {:.6f}'.format(
-            epoch, nb_epochs, batch_idx+1, len(dataloader),
-            cost.item()
-            ))
+    model.eval()
+    for batch_idx, samples in enumerate(test_dataloader):
+        x_train, y_train = samples
+        prediction = model(x_train)
+        cost = F.l1_loss(prediction, y_train)
+        print('Cost: {:.6f}'.format(cost.item()))
+        if batch_idx == 100:
+            break

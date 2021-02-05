@@ -260,18 +260,15 @@ def make_train_data_sbox():
     train_cipher = cipher.substitute(train_plain)
     return train_plain, train_cipher
 
-def make_train_data_round(): #round before xor round key
+def make_train_data_round(): #round
     cipher = des(1)
     cipher.password = os.urandom(8)
     cipher.generatekeys()
     plaintext = os.urandom(8)
 
     ciphertext = string_to_bit_array(cipher.encrypt(cipher.password, plaintext))
-    train_plain = string_to_bit_array(plaintext)
-    train_cipher = ciphertext
-    #train_cipher = cipher.permut(ciphertext, PI)
-    #train_plain = cipher.permut(string_to_bit_array(plaintext), PI)
-    #train_plain = string_to_bit_array(os.urandom(6))
-    #train_cipher = cipher.substitute(train_plain)
+
+    train_cipher = cipher.permut(ciphertext, PI)
+    train_plain = cipher.permut(string_to_bit_array(plaintext), PI)
     train_key = cipher.permut(string_to_bit_array(cipher.password), CP_1)
     return train_plain, train_cipher, train_key

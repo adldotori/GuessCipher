@@ -68,6 +68,8 @@ if __name__ == '__main__':
     batchsize = 32
     nb_epochs = 1
 
+    path_A = 'des_round_A.pt'
+    path_B = 'des_round_B.pt'
     model_A = Model(64, 512, known_key_bits, 4)  # **********************
     model_B = Model(512, 64, 0, 3)
     
@@ -108,15 +110,25 @@ if __name__ == '__main__':
                     optimizer_B.step()
 
                     if batch_idx == 0 and epoch == 0:
+                        torch.save(model_A.state_dict(), path_A)
+                        torch.save(model_B.state_dict(), path_B)
                         print('count_A: {:2d}  count_B: {:2d}  Cost: {:.6f}'.format(count_A, count_B, cost.item()))
-        
+
+                    if cost.item() < 0.05:
+                        torch.save(model_A.state_dict(), path_A)
+                        torch.save(model_B.state_dict(), path_B)
+                        exit()
+
         mid_train = model_A(x_train)
         prediction = model_B(mid_train)
         cost = F.l1_loss(prediction, y_train)
+
         model_A.train()
+
         print(cost.item())
+
         optimizer_A.zero_grad()
         cost.backward()
         optimizer_A.step()
-
+        
         count_A += 1

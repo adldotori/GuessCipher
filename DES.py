@@ -272,3 +272,11 @@ def make_train_data_round(): #round
     train_plain = cipher.permut(string_to_bit_array(plaintext), PI)
     train_key = cipher.permut(string_to_bit_array(cipher.password), CP_1)
     return train_plain, train_cipher, train_key
+
+def make_train_data_simple():
+    cipher = des(1)
+    plaintext = os.urandom(6)
+    train_plain = string_to_bit_array(plaintext)
+    train_cipher = cipher.permut(cipher.substitute(train_plain), P)
+    return train_plain, train_cipher
+
